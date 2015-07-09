@@ -9,23 +9,27 @@ $ofn =~ s/^(.+)\..+$/$1\.blpl.tsv/;
 my %h = ();
 open my $ifh, '<', $ifn or die $!;
 my $ncbi = 0;
+
+## Parse blast
 while(<$ifh>){
 	chomp;
-	$ncbi = 1 if($_ =~ m/^# RID:/);
-	next if($_ =~ m/^#/);
-	next if($_ =~ m/^(\s+)?$/);
+	$ncbi = 1 if($_ =~ m/^# RID:/);  ## Flag for Hit Table(Text)
+	next if($_ =~ m/^#/); ## Ignore comments
+	next if($_ =~ m/^(\s+)?$/); ## Ignore blank lines
 	my ($query, $hit, $pctpos, $pctid, $alen, $mismatch, $gapopen, $qstart, $qend, $sstart, $send, $evalue, $bitscore) = (undef,undef,undef,undef,undef,undef,undef,undef,undef,undef,undef,undef);
 	if($ncbi == 0){
 		($query, $hit, $pctid, $alen, $mismatch, $gapopen, $qstart, $qend, $sstart, $send, $evalue, $bitscore) = split(/\t/, $_);
 	}else{
 		($query, $hit, $pctid, $pctpos, $alen, $mismatch, $gapopen, $qstart, $qend, $sstart, $send, $evalue, $bitscore) = split(/\t/, $_);
 	}
+	## Convert evalue to escore
 	my $escore = 0;
 	if($evalue == 0){
 		$escore = 200;
 	}elsif($evalue =~ m/^([\d\.]+)e-(\d+)$/i){
 		$escore = $2 . '.' . int($1);
 	}
+	## Save best escore to hash
 	if(exists $h{$hit}){
 		if($h{$hit}{'escore'} > $escore){
 			next;
@@ -37,6 +41,8 @@ while(<$ifh>){
 	};
 }
 close $ifh;
+
+## Dump best hits to tsv
 open my $ofh, '>', $ofn or die $!;
 print $ofh join("\t", "Hit", "Type", "Score") . "\n";
 foreach(keys %h){
@@ -46,7 +52,7 @@ close $ofh;
 my $png = $ofn;
 $png =~ s/\.blpl\.tsv$/.png/;
 
-## R-Code
+## Write R-Code
 open my $r, '>', 'tmp.R' or die $!;
 # no need to setwd
 print $r "data <- read.table(\"$ofn\", header=TRUE, sep=\"\\t\")\n";
@@ -63,8 +69,10 @@ print $r "g <- arrangeGrob(eplot, pplot, ncol=2)\n";
 print $r "ggsave(file=\"$png\", g, dpi=300, height=5, width=10)\n";
 close $r;
 
-## Cleanup
+## Run R
 system("R CMD BATCH tmp.R");
+
+## Cleanup
 system("rm tmp.R*");
 system("rm Rplots.pdf") if(-e 'Rplots.pdf');
 system("rm $ofn");
